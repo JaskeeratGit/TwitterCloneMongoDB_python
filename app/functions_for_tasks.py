@@ -7,27 +7,37 @@ import re
 def search_tweets(keywords, mongo_uri):
     # Connect to MongoDB
     client = MongoClient('mongodb://localhost:{}/'.format(mongo_uri))
-    
+
     # Create or get the database
     db = client["291db"]
 
     # Get the tweets collection
     tweets_collection = db["tweets"]
 
-    # Build a case-insensitive regex for ma tching keywords as separate words in the content
-    query = {"content": {"$regex": r'\b' + r'\b.*\b'.join(map(re.escape, keywords)) + r'\b', "$options": "i"}}
+    # Build a list of conditions for $and with $regex for each keyword
+    conditions = [{"content": {"$regex": rf'\b{re.escape(keyword)}\b', "$options": "i"}} for keyword in keywords]
 
-    # Execute the query and retrieve matching tweets
-    matching_tweets = tweets_collection.find(query, {"_id": 1, "date": 1, "content": 1, "username": 1})
+    # Execute the query and retrieve matching tweets with the 'user' field
+    query = {"$and": conditions}
+    matching_tweets = list(tweets_collection.find(query, {"_id": 1, "date": 1, "content": 1, "user": 1, "url": 1, "replyCount": 1, "retweetCount": 1, "likeCount": 1, "quoteCount": 1}))
 
-    # Display the matching tweets
-    for tweet in matching_tweets:
-        print("Tweet ID:", tweet["_id"])
-        print("Date:", tweet["date"])
-        print("Content:", tweet["content"])
-        # Use get method to handle the case where 'username' key may not exist
-        print("Username:", tweet.get("username", "N/A"))
-        print("\n")
+    # Display the matching tweets with an index
+    for index, tweet in enumerate(matching_tweets, start=1):
+        print(f"{index}. Tweet ID: {tweet['_id']}, Date: {tweet['date']}, Content: {tweet['content']}, Username: {tweet['user'].get('username', 'N/A')}")
+
+    # Allow the user to select a tweet by index
+    try:
+        selected_index = int(input("Enter the number of the tweet to see all fields (or press Enter to skip): ").strip()) - 1
+        selected_tweet = matching_tweets[selected_index] if 0 <= selected_index < len(matching_tweets) else None
+
+        if selected_tweet:
+            print("\nAll Fields for Selected Tweet:")
+            for field, value in selected_tweet.items():
+                print(f"{field}: {value}")
+        else:
+            print("Invalid selection. Tweet not found.")
+    except ValueError:
+        print("No tweet selected.")
 
 def list_top_tweets(mongo_uri, n):
     # Connect to MongoDB
@@ -77,18 +87,24 @@ def list_top_tweets(mongo_uri, n):
         print(f"{i}. Tweet ID: {tweet.get('id', 'N/A')}, Date: {tweet.get('date', 'N/A')}, Content: {tweet.get('content', 'N/A')}, Username: {tweet.get('user', {}).get('username', 'N/A')}, {selected_field}: {tweet.get(selected_field, 'N/A')}")
 
     # Allow the user to select a tweet and see all fields
-    selected_tweet_id = input("Enter the Tweet ID to see all fields: ").strip()
+    while True:
+        try:
+            selected_rank = int(input("Enter the rank of the tweet to see all fields (or press Enter to exit): ").strip())
+            if 1 <= selected_rank <= n:
+                break
+            else:
+                print("Invalid rank. Please enter a valid rank.")
+        except ValueError:
+            print("Invalid input. Please enter a valid rank.")
 
-    # Find the selected tweet by ID
-    selected_tweet = tweets_collection.find_one({"id": int(selected_tweet_id)})
+    # Find the selected tweet by rank
+    selected_tweet = tweets_collection.find().sort([(selected_field, pymongo.DESCENDING)]).skip(selected_rank - 1).limit(1)
 
     # Display all fields for the selected tweet
-    if selected_tweet:
+    for tweet in selected_tweet:
         print("Selected Tweet:")
-        for key, value in selected_tweet.items():
+        for key, value in tweet.items():
             print(f"{key}: {value}")
-    else:
-        print("Tweet not found.")
 
 def get_full_user_info(mongo_uri, username):
     #Connect to MongoDB database
@@ -191,13 +207,37 @@ def compose_and_insert_tweet(content, mongo_uri):
 
     print("Tweet inserted successfully.")
 
-#keywords = ["are"]
-#mongo_uri = 27017
-#content = "AYO THIS GUY IS CRACKED"
-#keyword = "kaur"
+def list_top_users(mongo_uri, n):
+    client = MongoClient('mongodb://localhost:{}/'.format(mongo_uri))
+    db = client["291db"]
+    tweets_collection = db["tweets"]
+
+    # Find top n users based on followersCount_index
+    top_users = list(tweets_collection.find({}, {"user.username": 1, "user.displayname": 1, "user.followersCount": 1}).sort([("user.followersCount", pymongo.DESCENDING)]).limit(n))
+
+    # Print the top users with numbered options
+    print(f"Top {n} users based on followersCount_index:")
+    for i, user in enumerate(top_users, start=1):
+        print(f"{i}. Username: {user['user']['username']}, Displayname: {user['user']['displayname']}, FollowersCount: {user['user']['followersCount']}")
+
+    # Prompt the user to select a user
+    selected_option = int(input("Enter the number of the user to get full information (1 to {n}): "))
+    
+    # Get the selected user's information
+    if 1 <= selected_option <= n:
+        selected_user = top_users[selected_option - 1]
+        username = selected_user['user']['username']
+        get_full_user_info(username)
+    else:
+        print("Invalid selection. Please enter a valid number.")
+
+keywords = ["are", "farmers", "GUNDAs"]
+mongo_uri = 27017
+content = "AYO THIS GUY IS CRACKED"
+keyword = "kaur"
 
 #search_and_view_users(keyword, mongo_uri)
-#search_tweets(keywords, mongo_uri)
+search_tweets(keywords, mongo_uri)
 #list_top_tweets(mongo_uri, 3)
 #list_top_users(mongo_uri, 3)
 #compose_and_insert_tweet(content, mongo_uri)
