@@ -21,3 +21,8 @@ Compose a tweet The user should be able to compose a tweet by entering a tweet c
 After each action, the user should be able to return to the main menu for further operations. There should be also an option to end the program.
 
 Keyword matching. A keyword is an alphanumeric sequence of characters. You can assume multiple keywords in a tweet are separated by spaces or punctuations.  Keyword matches in (1) and (2) are case insensitive matches. Case insensitive indexes in MongoDB can be created by setting the collation option.
+
+
+# Final Comments
+
+The task required extensive prompting and some prior knowledge and experience with MongoDB to perform the taks within the performace range.
