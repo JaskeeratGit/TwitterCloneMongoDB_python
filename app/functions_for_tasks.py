@@ -38,6 +38,7 @@ def search_tweets(keywords, mongo_uri):
             print("Invalid selection. Tweet not found.")
     except ValueError:
         print("No tweet selected.")
+    client.close()
 
 def list_top_tweets(mongo_uri, n):
     # Connect to MongoDB
@@ -62,7 +63,7 @@ def list_top_tweets(mongo_uri, n):
     # Check if the choice is valid
     if selected_field is None:
         print("Invalid choice. Please enter a valid number.")
-        sys.exit(1)
+        return
 
     # Create an index dictionary for mapping user input to the corresponding index
     index_dict = {
@@ -87,15 +88,20 @@ def list_top_tweets(mongo_uri, n):
         print(f"{i}. Tweet ID: {tweet.get('id', 'N/A')}, Date: {tweet.get('date', 'N/A')}, Content: {tweet.get('content', 'N/A')}, Username: {tweet.get('user', {}).get('username', 'N/A')}, {selected_field}: {tweet.get(selected_field, 'N/A')}")
 
     # Allow the user to select a tweet and see all fields
-    while True:
+    x=True
+    while x==True:
         try:
             selected_rank = int(input("Enter the rank of the tweet to see all fields (or press Enter to exit): ").strip())
             if 1 <= selected_rank <= n:
                 break
             else:
                 print("Invalid rank. Please enter a valid rank.")
+                x = False
+                return
         except ValueError:
             print("Invalid input. Please enter a valid rank.")
+            x = False
+            return
 
     # Find the selected tweet by rank
     selected_tweet = tweets_collection.find().sort([(selected_field, pymongo.DESCENDING)]).skip(selected_rank - 1).limit(1)
@@ -105,6 +111,7 @@ def list_top_tweets(mongo_uri, n):
         print("Selected Tweet:")
         for key, value in tweet.items():
             print(f"{key}: {value}")
+    client.close()
 
 def get_full_user_info(mongo_uri, username):
     #Connect to MongoDB database
@@ -123,6 +130,7 @@ def get_full_user_info(mongo_uri, username):
         # Add more fields as needed
     else:
         print("User not found.")
+    client.close()
 
 def search_and_view_users(keyword, mongo_uri):
     # Connect to MongoDB
@@ -166,7 +174,7 @@ def search_and_view_users(keyword, mongo_uri):
         while True:
             user_choice = input("\nSelect a user (enter the corresponding number) or press Enter to exit: ")
             if not user_choice:
-                sys.exit(0)  # Exit if the user presses Enter
+                return # Exit if the user presses Enter
             if re.match("^[1-9][0-9]*$", user_choice):
                 user_choice = int(user_choice)
                 if 1 <= user_choice <= len(unique_users):
@@ -178,6 +186,7 @@ def search_and_view_users(keyword, mongo_uri):
                     print("Invalid input. Please enter a valid number.")
             else:
                 print("Invalid input. Please enter a valid number.")
+    client.close()
 
 def compose_and_insert_tweet(content, mongo_uri):
     # Connect to MongoDB
@@ -191,53 +200,113 @@ def compose_and_insert_tweet(content, mongo_uri):
 
     # Compose the tweet
     tweet = {
+        "url": None,
+        "date": datetime.now(),
         "content": content,
-        "date": datetime.now(),  # Use datetime class explicitly
-        "username": "291user",
-        "displayname": None,
-        "location": None,
-        "followersCount": None,
+        "renderedContent": None,
+        "id": None,
+        "user": {
+            "username": "291user",
+            "displayname": None,
+            "id": None,
+            "description": None,
+            "rawDescription": None,
+            "descriptionUrls": None,
+            "verified": None,
+            "created": None,
+            "followersCount": None,
+            "friendsCount": None,
+            "statusesCount": None,
+            "favouritesCount": None,
+            "listedCount": None,
+            "mediaCount": None,
+            "location": None,
+            "protected": None,
+            "linkUrl": None,
+            "linkTcourl": None,
+            "profileImageUrl": None,
+            "profileBannerUrl": None,
+            "url": None
+        },
+        "outlinks": None,
+        "tcooutlinks": None,
+        "replyCount": None,
+        "retweetCount": None,
         "likeCount": None,
         "quoteCount": None,
-        "retweetCount": None
+        "conversationId": None,
+        "lang": None,
+        "source": None,
+        "sourceUrl": None,
+        "sourceLabel": None,
+        "media": None,
+        "retweetedTweet": None,
+        "quotedTweet": None,
+        "mentionedUsers": None
     }
 
     # Insert the tweet into the database
     tweets_collection.insert_one(tweet)
 
     print("Tweet inserted successfully.")
+    client.close()
 
 def list_top_users(mongo_uri, n):
     client = MongoClient('mongodb://localhost:{}/'.format(mongo_uri))
     db = client["291db"]
     tweets_collection = db["tweets"]
 
-    # Find top n users based on followersCount_index
-    top_users = list(tweets_collection.find({}, {"user.username": 1, "user.displayname": 1, "user.followersCount": 1}).sort([("user.followersCount", pymongo.DESCENDING)]).limit(n))
+    # Aggregate to find top n users with the maximum followersCount
+    pipeline = [
+        {"$group": {
+            "_id": "$user.username",
+            "maxFollowersCount": {"$max": "$user.followersCount"},
+            "displayname": {"$first": "$user.displayname"}
+        }},
+        {"$sort": {"maxFollowersCount": pymongo.DESCENDING}},
+        {"$limit": n},
+        {"$project": {
+            "_id": 0,
+            "username": "$_id",
+            "displayname": 1,
+            "maxFollowersCount": 1
+        }}
+    ]
+
+    top_users = list(tweets_collection.aggregate(pipeline))
+
+    # Check if there are no users
+    if not top_users:
+        print("No users found.")
+        return
 
     # Print the top users with numbered options
     print(f"Top {n} users based on followersCount_index:")
     for i, user in enumerate(top_users, start=1):
-        print(f"{i}. Username: {user['user']['username']}, Displayname: {user['user']['displayname']}, FollowersCount: {user['user']['followersCount']}")
+        print(f"{i}. Username: {user['username']}, Displayname: {user['displayname']}, FollowersCount: {user['maxFollowersCount']}")
 
     # Prompt the user to select a user
-    selected_option = int(input("Enter the number of the user to get full information (1 to {n}): "))
-    
+    try:
+        selected_option = int(input(f"Enter the number of the user to get full information (1 to {n}) or press anything except a number to exit: "))
+    except ValueError:
+        return
+
     # Get the selected user's information
     if 1 <= selected_option <= n:
         selected_user = top_users[selected_option - 1]
-        username = selected_user['user']['username']
-        get_full_user_info(username)
+        username = selected_user['username']
+        get_full_user_info(mongo_uri, username)
     else:
         print("Invalid selection. Please enter a valid number.")
+    client.close()
 
+"""
 keywords = ["are", "farmers", "GUNDAs"]
 mongo_uri = 27017
-content = "AYO THIS GUY IS CRACKED"
 keyword = "kaur"
-
+"""
 #search_and_view_users(keyword, mongo_uri)
-search_tweets(keywords, mongo_uri)
+#search_tweets(keywords, mongo_uri)
 #list_top_tweets(mongo_uri, 3)
 #list_top_users(mongo_uri, 3)
 #compose_and_insert_tweet(content, mongo_uri)
