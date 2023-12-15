@@ -1,13 +1,10 @@
-import pymongo
+
 from pymongo import MongoClient
 from datetime import datetime
 import sys
 from functions_for_tasks import search_and_view_users, search_tweets, list_top_tweets, compose_and_insert_tweet, list_top_users
 
-# Constant for MongoDB port
-MONGO_PORT = 27017
-
-def main_menu():
+def main_menu(MONGO_PORT):
     print("\n")
     print("Welcome to the main menu. You have the following options:")
     print("1. Search for tweets")
@@ -67,8 +64,12 @@ def main_menu():
         print("Invalid choice. Please enter a valid number.")
 
 # Run the main menu
-while True:
-    main_menu()
+
+
+if __name__ == "__main__":
+    MONGO_PORT = sys.argv[1]
+    while True:
+        main_menu(MONGO_PORT)
 
 
 #NOTES: EDIT SEARCH USERS TO SAY IF NO USER HAS BEEN FOUND AND TO NOT EXIT THE PROGRAM STRAIGHT AFTER
